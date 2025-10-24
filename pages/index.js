@@ -7,6 +7,7 @@ export default function CRUDApp() {
   const [description, setDescription] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchItems();
@@ -14,41 +15,62 @@ export default function CRUDApp() {
 
   const fetchItems = async () => {
     setLoading(true);
+    setError('');
     try {
       const response = await fetch('/api/items');
       const data = await response.json();
-      setItems(data);
+      
+      console.log('Fetched data:', data);
+      console.log('Is array?', Array.isArray(data));
+      
+      // Check if response is an error object
+      if (data.error) {
+        setError(data.error + (data.details ? ': ' + data.details : ''));
+        setItems([]);
+      } else if (Array.isArray(data)) {
+        setItems(data);
+      } else {
+        setError('Unexpected response format');
+        setItems([]);
+      }
     } catch (error) {
       console.error('Error fetching items:', error);
+      setError('Failed to fetch items: ' + error.message);
+      setItems([]);
     }
     setLoading(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!name || !description) return;
+    
     setLoading(true);
+    setError('');
 
     try {
-      if (editingId) {
-        await fetch(`/api/items/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description }),
-        });
-      } else {
-        await fetch('/api/items', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description }),
-        });
-      }
+      const url = editingId ? `/api/items/${editingId}` : '/api/items';
+      const method = editingId ? 'PUT' : 'POST';
       
-      setName('');
-      setDescription('');
-      setEditingId(null);
-      fetchItems();
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setName('');
+        setDescription('');
+        setEditingId(null);
+        fetchItems();
+      }
     } catch (error) {
       console.error('Error saving item:', error);
+      setError('Failed to save item: ' + error.message);
     }
     setLoading(false);
   };
@@ -63,11 +85,19 @@ export default function CRUDApp() {
     if (!confirm('Are you sure you want to delete this item?')) return;
     
     setLoading(true);
+    setError('');
     try {
-      await fetch(`/api/items/${id}`, { method: 'DELETE' });
-      fetchItems();
+      const response = await fetch(`/api/items/${id}`, { method: 'DELETE' });
+      const data = await response.json();
+      
+      if (data.error) {
+        setError(data.error);
+      } else {
+        fetchItems();
+      }
     } catch (error) {
       console.error('Error deleting item:', error);
+      setError('Failed to delete item: ' + error.message);
     }
     setLoading(false);
   };
@@ -81,6 +111,12 @@ export default function CRUDApp() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+            {error}
+          </div>
+        )}
+        
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">Next.js MySQL CRUD</h1>
           
@@ -139,7 +175,7 @@ export default function CRUDApp() {
           
           {loading && items.length === 0 ? (
             <p className="text-gray-500 text-center py-8">Loading...</p>
-          ) : items.length === 0 ? (
+          ) : !Array.isArray(items) || items.length === 0 ? (
             <p className="text-gray-500 text-center py-8">No items yet. Add one above!</p>
           ) : (
             <div className="space-y-3">
